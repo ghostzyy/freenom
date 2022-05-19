@@ -59,11 +59,14 @@ if (!function_exists('system_log')) {
      * 'light_yellow', 'light_blue', 'light_magenta', 'light_cyan', 'white', 'bg_default', 'bg_black', 'bg_red',
      * 'bg_green', 'bg_yellow', 'bg_blue', 'bg_magenta', 'bg_cyan', 'bg_light_gray', 'bg_dark_gray', 'bg_light_red',
      * 'bg_light_green','bg_light_yellow', 'bg_light_blue', 'bg_light_magenta', 'bg_light_cyan', 'bg_white'
+     *
+     * system_log('<light_magenta>颜色 light_magenta</light_magenta>');
      */
     function system_log($content, array $response = [], $fileName = '')
     {
         try {
-            $path = sprintf('%s/logs/%s/', ROOT_PATH, date('Y-m'));
+            # 云函数只有 /tmp 目录可写
+            $path = IS_SCF ? '/tmp/' : sprintf('%s/logs/%s/', ROOT_PATH, date('Y-m'));
             $file = $path . ($fileName ?: date('d')) . '.log';
 
             if (!is_dir($path)) {
@@ -230,14 +233,16 @@ if (!function_exists('system_check')) {
      */
     function system_check()
     {
-        if (version_compare(PHP_VERSION, '7.0.0') < 0) {
-            throw new LlfException(34520006);
+        // 由于各种云函数目前支持的最大的 PHP 版本为 7.2，故此处暂时不强制要求升级 PHP 7.3 以获得更好的兼容性
+        if (version_compare(PHP_VERSION, '7.2.0') < 0) {
+            throw new LlfException(34520006, ['7.3', PHP_VERSION]);
         }
 
-        // 如果是在腾讯云函数部署，则不需要检查这几项
+        // 如果是在云函数部署，则不需要检查这几项
         if (IS_SCF) {
-            system_log('检测到运行环境为腾讯云函数，所有环境变量将直接从环境中读取，如果 .env 文件存在的话，则优先使用 .env 文件中的环境变量');
-            system_log('在腾讯云函数，可以参考此处修改或新增环境变量，无需重建：https://github.com/luolongfei/freenom/blob/main/resources/screenshot/scf_env_modify.png');
+            system_log(lang('100009'));
+            system_log(lang('100010'));
+            system_log(lang('100011'));
         } else {
             if (!function_exists('putenv')) {
                 throw new LlfException(34520005);
@@ -256,11 +261,66 @@ if (!function_exists('system_check')) {
         if (config('new_version_detection')) {
             Upgrade::getInstance()->handle();
         } else {
-            system_log('由于你没有开启升级提醒功能，故无法在有新版本可用时第一时间收到通知。将 .env 文件中 NEW_VERSION_DETECTION 的值改为 1 即可重新开启相关功能。');
+            system_log(lang('100012'));
         }
 
         if (!extension_loaded('curl')) {
             throw new LlfException(34520010);
         }
+    }
+}
+
+if (!function_exists('get_local_num')) {
+    /**
+     * 获取当地数字
+     *
+     * @param string|int $num
+     *
+     * @return string
+     */
+    function get_local_num($num)
+    {
+        $num = (string)$num;
+
+        if (\config('language') === 'zh') {
+            return $num;
+        }
+
+        // 英文数字规则
+        $lastDigit = substr($num, -1);
+        switch ($lastDigit) {
+            case '1':
+                return $num . 'st';
+            case '2':
+                return $num . 'nd';
+            case '3':
+                return $num . 'rd';
+            default:
+                return $num . 'th';
+        }
+    }
+}
+
+if (!function_exists('is_chinese')) {
+    /**
+     * 判断当前语言环境
+     *
+     * @return bool
+     */
+    function is_chinese()
+    {
+        return config('language', 'zh') === 'zh';
+    }
+}
+
+if (!function_exists('get_ip_info')) {
+    /**
+     * 获取 ip 信息
+     *
+     * @return string
+     */
+    function get_ip_info()
+    {
+        return \Luolongfei\Libs\IP::getInstance()->get();
     }
 }
